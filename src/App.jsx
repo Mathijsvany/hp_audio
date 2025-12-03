@@ -5,7 +5,7 @@ import BookList from './components/BookList';
 import Player from './components/Player';
 
 const AppContent = () => {
-    const { user, loading } = useAuth();
+    const { user, loading, logout } = useAuth();
     const [selectedBook, setSelectedBook] = useState(null);
 
     if (loading) {
@@ -27,6 +27,12 @@ const AppContent = () => {
                 <div className="flex items-center gap-3">
                     <img src={user.picture} alt="User" className="w-8 h-8 rounded-full" />
                     <span className="hidden md:inline text-sm text-gray-400">{user.name}</span>
+                    <button
+                        onClick={logout}
+                        className="ml-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-colors"
+                    >
+                        Logout
+                    </button>
                 </div>
             </div>
             <BookList onSelectBook={setSelectedBook} />

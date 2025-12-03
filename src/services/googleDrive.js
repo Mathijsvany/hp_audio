@@ -140,10 +140,21 @@ export const listChapters = async (folderId) => {
 const PROGRESS_FILE_NAME = 'hp_audio_progress.json';
 
 export const saveProgress = async (progressData) => {
-    if (!accessToken) return;
+    // Always save to localStorage first (instant fallback)
+    try {
+        localStorage.setItem('hp_audio_progress', JSON.stringify(progressData));
+        console.log("✅ Progress saved to localStorage");
+    } catch (e) {
+        console.error("Failed to save to localStorage:", e);
+    }
+
+    if (!accessToken) {
+        console.log("No access token, only localStorage saved");
+        return;
+    }
 
     try {
-        console.log("Saving progress:", progressData);
+        console.log("Attempting to save to Google Drive AppData...");
 
         const listResponse = await gapi.client.drive.files.list({
             spaces: 'appDataFolder',
@@ -164,9 +175,10 @@ export const saveProgress = async (progressData) => {
             `--foo_bar_baz\r\nContent-Type: application/json\r\n\r\n${fileContent}\r\n` +
             `--foo_bar_baz--`;
 
+        let response;
         if (fileId) {
-            console.log("Updating existing progress file:", fileId);
-            const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
+            console.log("Updating existing file in Drive:", fileId);
+            response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
                 method: 'PATCH',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -174,10 +186,9 @@ export const saveProgress = async (progressData) => {
                 },
                 body: multipartRequestBody,
             });
-            console.log("Progress updated, status:", response.status);
         } else {
-            console.log("Creating new progress file");
-            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            console.log("Creating new file in Drive");
+            response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -185,50 +196,66 @@ export const saveProgress = async (progressData) => {
                 },
                 body: multipartRequestBody,
             });
-            console.log("Progress file created, status:", response.status);
+        }
+
+        if (response.ok) {
+            console.log("✅ Progress saved to Google Drive, status:", response.status);
+        } else {
+            console.warn("⚠️ Drive save failed (status " + response.status + "), but localStorage saved");
         }
     } catch (error) {
-        console.error("Failed to save progress:", error);
+        console.error("❌ Failed to save to Drive:", error);
+        console.log("But localStorage backup exists");
     }
 };
 
 export const loadProgress = async () => {
-    if (!accessToken) {
-        console.log("No access token for loadProgress");
-        return {};
-    }
+    // Try Drive first, fallback to localStorage
+    let driveProgress = {};
 
-    try {
-        const listResponse = await gapi.client.drive.files.list({
-            spaces: 'appDataFolder',
-            q: `name = '${PROGRESS_FILE_NAME}'`,
-            fields: 'files(id)',
-        });
+    if (accessToken) {
+        try {
+            console.log("Loading progress from Google Drive...");
 
-        const fileId = listResponse.result.files?.[0]?.id;
-        if (!fileId) {
-            console.log("No progress file found in AppData");
-            return {};
-        }
+            const listResponse = await gapi.client.drive.files.list({
+                spaces: 'appDataFolder',
+                q: `name = '${PROGRESS_FILE_NAME}'`,
+                fields: 'files(id)',
+            });
 
-        console.log("Loading progress from file:", fileId);
+            const fileId = listResponse.result.files?.[0]?.id;
+            if (fileId) {
+                console.log("Found progress file in Drive:", fileId);
 
-        // Use fetch instead of gapi for better JSON handling
-        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`
+                const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+
+                if (response.ok) {
+                    driveProgress = await response.json();
+                    console.log("✅ Loaded progress from Drive:", driveProgress);
+                    return driveProgress;
+                }
+            } else {
+                console.log("No progress file in Drive");
             }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        } catch (error) {
+            console.error("Failed to load from Drive:", error);
         }
-
-        const progressData = await response.json();
-        console.log("Loaded progress:", progressData);
-        return progressData;
-    } catch (error) {
-        console.error("Failed to load progress:", error);
-        return {};
     }
+
+    // Fallback to localStorage
+    try {
+        const localData = localStorage.getItem('hp_audio_progress');
+        if (localData) {
+            const localProgress = JSON.parse(localData);
+            console.log("✅ Loaded progress from localStorage:", localProgress);
+            return localProgress;
+        }
+    } catch (e) {
+        console.error("Failed to load from localStorage:", e);
+    }
+
+    console.log("No progress found anywhere, returning empty");
+    return {};
 };
