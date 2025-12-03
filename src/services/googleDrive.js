@@ -143,6 +143,8 @@ export const saveProgress = async (progressData) => {
     if (!accessToken) return;
 
     try {
+        console.log("Saving progress:", progressData);
+
         const listResponse = await gapi.client.drive.files.list({
             spaces: 'appDataFolder',
             q: `name = '${PROGRESS_FILE_NAME}'`,
@@ -163,7 +165,8 @@ export const saveProgress = async (progressData) => {
             `--foo_bar_baz--`;
 
         if (fileId) {
-            await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
+            console.log("Updating existing progress file:", fileId);
+            const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
                 method: 'PATCH',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -171,8 +174,10 @@ export const saveProgress = async (progressData) => {
                 },
                 body: multipartRequestBody,
             });
+            console.log("Progress updated, status:", response.status);
         } else {
-            await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            console.log("Creating new progress file");
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -180,14 +185,18 @@ export const saveProgress = async (progressData) => {
                 },
                 body: multipartRequestBody,
             });
+            console.log("Progress file created, status:", response.status);
         }
     } catch (error) {
-        console.error("Failed to save progress", error);
+        console.error("Failed to save progress:", error);
     }
 };
 
 export const loadProgress = async () => {
-    if (!accessToken) return {};
+    if (!accessToken) {
+        console.log("No access token for loadProgress");
+        return {};
+    }
 
     try {
         const listResponse = await gapi.client.drive.files.list({
@@ -196,17 +205,30 @@ export const loadProgress = async () => {
             fields: 'files(id)',
         });
 
-        const fileId = listResponse.result.files[0]?.id;
-        if (!fileId) return {};
+        const fileId = listResponse.result.files?.[0]?.id;
+        if (!fileId) {
+            console.log("No progress file found in AppData");
+            return {};
+        }
 
-        const response = await gapi.client.drive.files.get({
-            fileId: fileId,
-            alt: 'media',
+        console.log("Loading progress from file:", fileId);
+
+        // Use fetch instead of gapi for better JSON handling
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
         });
 
-        return response.result || {};
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const progressData = await response.json();
+        console.log("Loaded progress:", progressData);
+        return progressData;
     } catch (error) {
-        console.error("Failed to load progress", error);
+        console.error("Failed to load progress:", error);
         return {};
     }
 };
