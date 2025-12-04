@@ -179,14 +179,15 @@ export const saveProgress = async (progressData) => {
 
         let response;
         if (fileId) {
-            console.log("Updating existing file in Drive:", fileId);
-            response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
+            console.log("Updating existing file in Drive (media only):", fileId);
+            // Use simple media upload for updates - less error prone than multipart
+            response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
                 method: 'PATCH',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
-                    'Content-Type': 'multipart/related; boundary=foo_bar_baz',
+                    'Content-Type': 'application/json',
                 },
-                body: multipartRequestBody,
+                body: JSON.stringify(progressData),
             });
         } else {
             console.log("Creating new file in Drive");
@@ -203,6 +204,8 @@ export const saveProgress = async (progressData) => {
         if (response.ok) {
             console.log("✅ Progress saved to Google Drive, status:", response.status);
         } else {
+            const errorText = await response.text();
+            console.error("⚠️ Drive save failed:", response.status, errorText);
             console.warn("⚠️ Drive save failed (status " + response.status + "), but localStorage saved");
         }
     } catch (error) {
