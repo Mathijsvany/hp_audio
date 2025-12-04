@@ -118,14 +118,16 @@ export const listChapters = async (folderId) => {
     if (!accessToken) throw new Error("Not authenticated");
     const response = await gapi.client.drive.files.list({
         q: `'${folderId}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType)',
+        fields: 'nextPageToken, files(id, name, mimeType, thumbnailLink)',
         orderBy: 'name',
     });
 
     console.log("📁 All files in folder:", response.result.files?.map(f => f.name));
 
+    const files = response.result.files || [];
+
     // Filter to only audio files
-    const audioFiles = (response.result.files || []).filter(file =>
+    const audioFiles = files.filter(file =>
         file.mimeType && (
             file.mimeType.startsWith('audio/') ||
             file.name.toLowerCase().endsWith('.mp3') ||
@@ -134,9 +136,20 @@ export const listChapters = async (folderId) => {
         )
     );
 
-    console.log("🎵 Audio files after filtering:", audioFiles.map((f, i) => `${i}: ${f.name}`));
+    // Find a cover image (first image file)
+    const coverImage = files.find(file =>
+        file.mimeType && (
+            file.mimeType.startsWith('image/') ||
+            file.name.toLowerCase().endsWith('.jpg') ||
+            file.name.toLowerCase().endsWith('.jpeg') ||
+            file.name.toLowerCase().endsWith('.png')
+        )
+    );
 
-    return audioFiles;
+    console.log("🎵 Audio files:", audioFiles.length);
+    if (coverImage) console.log("🖼️ Cover image found:", coverImage.name);
+
+    return { audioFiles, coverImage };
 };
 
 const PROGRESS_FILE_NAME = 'hp_audio_progress.json';

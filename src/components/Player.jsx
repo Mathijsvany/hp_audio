@@ -4,6 +4,8 @@ import { Play, Pause, SkipBack, SkipForward, RotateCcw, RotateCw, Volume2, List,
 
 const Player = ({ book, onBack }) => {
     const [chapters, setChapters] = useState([]);
+    const [coverImage, setCoverImage] = useState(null);
+    const [coverImageUrl, setCoverImageUrl] = useState(null);
     const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -18,10 +20,18 @@ const Player = ({ book, onBack }) => {
     useEffect(() => {
         const init = async () => {
             try {
-                const [files, savedProgress] = await Promise.all([
+                const [data, savedProgress] = await Promise.all([
                     listChapters(book.id),
                     loadProgress()
                 ]);
+
+                // Handle new return format { audioFiles, coverImage }
+                const files = data.audioFiles || data; // Fallback for old format if needed
+                const image = data.coverImage;
+
+                if (image) {
+                    setCoverImage(image);
+                }
 
                 const sorted = (files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
                 setChapters(sorted);
@@ -53,6 +63,31 @@ const Player = ({ book, onBack }) => {
         };
         init();
     }, [book.id]);
+
+    // Load Cover Image
+    useEffect(() => {
+        if (coverImage) {
+            const loadCover = async () => {
+                const accessToken = getAccessToken();
+                if (!accessToken) return;
+
+                try {
+                    console.log("🖼️ Loading cover art:", coverImage.name);
+                    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${coverImage.id}?alt=media`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        setCoverImageUrl(url);
+                    }
+                } catch (e) {
+                    console.error("Failed to load cover image", e);
+                }
+            };
+            loadCover();
+        }
+    }, [coverImage]);
 
     // Save progress function
     const handleSave = useCallback(async () => {
@@ -280,9 +315,17 @@ const Player = ({ book, onBack }) => {
 
             {/* Main Content - Simplified View */}
             <div className="flex-1 flex flex-col items-center justify-center p-6">
-                {/* Album Art Placeholder */}
-                <div className="w-64 h-64 bg-gradient-to-br from-yellow-600 to-yellow-800 rounded-2xl shadow-2xl mb-8 flex items-center justify-center">
-                    <div className="text-6xl">📖</div>
+                {/* Album Art */}
+                <div className="w-64 h-64 bg-gradient-to-br from-yellow-600 to-yellow-800 rounded-2xl shadow-2xl mb-8 flex items-center justify-center overflow-hidden relative">
+                    {coverImageUrl ? (
+                        <img
+                            src={coverImageUrl}
+                            alt={book.name}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="text-6xl">📖</div>
+                    )}
                 </div>
 
                 {/* Current Chapter */}
@@ -314,8 +357,8 @@ const Player = ({ book, onBack }) => {
                                     setIsPlaying(true);
                                 }}
                                 className={`p-2 rounded cursor-pointer text-sm mb-1 ${index === currentChapterIndex
-                                        ? 'bg-green-600/30 text-green-400'
-                                        : 'hover:bg-gray-700 text-gray-300'
+                                    ? 'bg-green-600/30 text-green-400'
+                                    : 'hover:bg-gray-700 text-gray-300'
                                     }`}
                             >
                                 {index + 1}. {chapter.name}
