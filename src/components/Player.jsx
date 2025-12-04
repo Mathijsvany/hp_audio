@@ -232,6 +232,28 @@ const Player = ({ book, onBack }) => {
                         Chapter {currentChapterIndex + 1} van {chapters.length}
                     </p>
                 </div>
+                <button
+                    onClick={async () => {
+                        if (confirm('Reset progress voor dit boek?')) {
+                            const allProgress = await loadProgress();
+                            // Overwrite with 0 instead of deleting, so timestamp is newer!
+                            allProgress[book.id] = {
+                                chapterIndex: 0,
+                                time: 0,
+                                timestamp: Date.now()
+                            };
+                            await saveProgress(allProgress);
+                            setCurrentChapterIndex(0);
+                            setCurrentTime(0);
+                            if (audioRef.current) audioRef.current.currentTime = 0;
+                            console.log('🔄 Progress reset to chapter 0!');
+                            alert('Progress gereset! Ververs de pagina.');
+                        }
+                    }}
+                    className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-600/50 rounded-lg text-xs text-red-400 transition-colors whitespace-nowrap"
+                >
+                    Reset
+                </button>
             </div>
 
             {/* Main Content - Simplified View */}
@@ -269,8 +291,8 @@ const Player = ({ book, onBack }) => {
                                     setIsPlaying(true);
                                 }}
                                 className={`p-2 rounded cursor-pointer text-sm mb-1 ${index === currentChapterIndex
-                                        ? 'bg-green-600/30 text-green-400'
-                                        : 'hover:bg-gray-700 text-gray-300'
+                                    ? 'bg-green-600/30 text-green-400'
+                                    : 'hover:bg-gray-700 text-gray-300'
                                     }`}
                             >
                                 {index + 1}. {chapter.name}

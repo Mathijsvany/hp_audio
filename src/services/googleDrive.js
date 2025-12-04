@@ -122,6 +122,8 @@ export const listChapters = async (folderId) => {
         orderBy: 'name',
     });
 
+    console.log("📁 All files in folder:", response.result.files?.map(f => f.name));
+
     // Filter to only audio files
     const audioFiles = (response.result.files || []).filter(file =>
         file.mimeType && (
@@ -132,7 +134,7 @@ export const listChapters = async (folderId) => {
         )
     );
 
-    console.log("Audio files found:", audioFiles.length);
+    console.log("🎵 Audio files after filtering:", audioFiles.map((f, i) => `${i}: ${f.name}`));
 
     return audioFiles;
 };
@@ -210,9 +212,21 @@ export const saveProgress = async (progressData) => {
 };
 
 export const loadProgress = async () => {
-    // Try Drive first, fallback to localStorage
     let driveProgress = {};
+    let localProgress = {};
 
+    // 1. Try to load from LocalStorage
+    try {
+        const localData = localStorage.getItem('hp_audio_progress');
+        if (localData) {
+            localProgress = JSON.parse(localData);
+            console.log("📂 Loaded progress from localStorage:", localProgress);
+        }
+    } catch (e) {
+        console.error("Failed to load from localStorage:", e);
+    }
+
+    // 2. Try to load from Drive
     if (accessToken) {
         try {
             console.log("Loading progress from Google Drive...");
@@ -233,8 +247,7 @@ export const loadProgress = async () => {
 
                 if (response.ok) {
                     driveProgress = await response.json();
-                    console.log("✅ Loaded progress from Drive:", driveProgress);
-                    return driveProgress;
+                    console.log("☁️ Loaded progress from Drive:", driveProgress);
                 }
             } else {
                 console.log("No progress file in Drive");
@@ -244,18 +257,30 @@ export const loadProgress = async () => {
         }
     }
 
-    // Fallback to localStorage
-    try {
-        const localData = localStorage.getItem('hp_audio_progress');
-        if (localData) {
-            const localProgress = JSON.parse(localData);
-            console.log("✅ Loaded progress from localStorage:", localProgress);
-            return localProgress;
-        }
-    } catch (e) {
-        console.error("Failed to load from localStorage:", e);
-    }
+    // 3. Merge logic: For each book, pick the one with the higher timestamp
+    const mergedProgress = { ...localProgress, ...driveProgress };
 
-    console.log("No progress found anywhere, returning empty");
-    return {};
+    // Iterate over all keys in both to ensure we pick the latest
+    const allKeys = new Set([...Object.keys(localProgress), ...Object.keys(driveProgress)]);
+
+    allKeys.forEach(bookId => {
+        const local = localProgress[bookId];
+        const drive = driveProgress[bookId];
+
+        if (local && drive) {
+            // Both exist, pick newer
+            if (local.timestamp > drive.timestamp) {
+                mergedProgress[bookId] = local;
+            } else {
+                mergedProgress[bookId] = drive;
+            }
+        } else if (local) {
+            mergedProgress[bookId] = local;
+        } else if (drive) {
+            mergedProgress[bookId] = drive;
+        }
+    });
+
+    console.log("✨ Final merged progress:", mergedProgress);
+    return mergedProgress;
 };
