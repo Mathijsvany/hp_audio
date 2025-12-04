@@ -77,61 +77,81 @@ const Player = ({ book, onBack }) => {
 
     // Handle Chapter Change & Audio Source
     useEffect(() => {
-        if (chapters.length > 0) {
-            const chapter = chapters[currentChapterIndex];
-            const accessToken = getAccessToken();
+        if (chapters.length === 0) return;
 
-            if (accessToken) {
-                console.log("🎵 Loading:", chapter.name);
+        const chapter = chapters[currentChapterIndex];
+        const accessToken = getAccessToken();
+        const abortController = new AbortController();
 
-                const loadAudio = async () => {
-                    try {
-                        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${chapter.id}?alt=media`, {
-                            headers: { 'Authorization': `Bearer ${accessToken}` }
+        if (accessToken) {
+            console.log("🎵 Loading:", chapter.name);
+
+            // Stop previous audio immediately
+            audioRef.current.pause();
+
+            const loadAudio = async () => {
+                try {
+                    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${chapter.id}?alt=media`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` },
+                        signal: abortController.signal
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                    const blob = await response.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+
+                    // cleanup old src if it was a blob url
+                    if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
+                        URL.revokeObjectURL(audioRef.current.src);
+                    }
+
+                    audioRef.current.src = blobUrl;
+
+                    // Setup audio event listeners
+                    audioRef.current.onloadedmetadata = () => {
+                        setDuration(audioRef.current.duration);
+                    };
+
+                    audioRef.current.ontimeupdate = () => {
+                        setCurrentTime(audioRef.current.currentTime);
+                    };
+
+                    audioRef.current.onended = () => {
+                        if (currentChapterIndex < chapters.length - 1) {
+                            console.log("Track ended, advancing to next chapter");
+                            setCurrentChapterIndex(prev => prev + 1);
+                            setCurrentTime(0); // Reset time for next chapter
+                        } else {
+                            setIsPlaying(false);
+                        }
+                    };
+
+                    // Restore time ONLY if we have a specific start time (from save)
+                    // When switching chapters manually, currentTime is reset to 0, so this won't trigger
+                    if (currentTime > 0) {
+                        console.log("Restoring time:", currentTime);
+                        audioRef.current.currentTime = currentTime;
+                    }
+
+                    if (isPlaying) {
+                        audioRef.current.play().catch(e => {
+                            if (e.name !== 'AbortError') console.error("Play failed", e);
                         });
-
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-                        const blob = await response.blob();
-                        const blobUrl = URL.createObjectURL(blob);
-
-                        const wasPlaying = isPlaying;
-                        audioRef.current.src = blobUrl;
-
-                        // Setup audio event listeners
-                        audioRef.current.onloadedmetadata = () => {
-                            setDuration(audioRef.current.duration);
-                        };
-
-                        audioRef.current.ontimeupdate = () => {
-                            setCurrentTime(audioRef.current.currentTime);
-                        };
-
-                        audioRef.current.onended = () => {
-                            if (currentChapterIndex < chapters.length - 1) {
-                                setCurrentChapterIndex(prev => prev + 1);
-                            } else {
-                                setIsPlaying(false);
-                            }
-                        };
-
-                        // Restore time if it's the first load
-                        if (currentTime > 0) {
-                            audioRef.current.currentTime = currentTime;
-                            setCurrentTime(0);
-                        }
-
-                        if (wasPlaying) {
-                            audioRef.current.play().catch(e => console.error("Play failed", e));
-                        }
-                    } catch (error) {
+                    }
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
                         console.error("Failed to load audio:", error);
                     }
-                };
+                }
+            };
 
-                loadAudio();
-            }
+            loadAudio();
         }
+
+        return () => {
+            abortController.abort();
+        };
     }, [currentChapterIndex, chapters]);
 
     // Auto-save progress every 10s when playing
@@ -179,6 +199,7 @@ const Player = ({ book, onBack }) => {
     const nextChapter = () => {
         if (currentChapterIndex < chapters.length - 1) {
             setCurrentChapterIndex(prev => prev + 1);
+            setCurrentTime(0);
             setIsPlaying(true);
         }
     };
@@ -186,6 +207,7 @@ const Player = ({ book, onBack }) => {
     const prevChapter = () => {
         if (currentChapterIndex > 0) {
             setCurrentChapterIndex(prev => prev - 1);
+            setCurrentTime(0);
             setIsPlaying(true);
         }
     };
@@ -288,11 +310,12 @@ const Player = ({ book, onBack }) => {
                                 key={chapter.id}
                                 onClick={() => {
                                     setCurrentChapterIndex(index);
+                                    setCurrentTime(0); // Reset time!
                                     setIsPlaying(true);
                                 }}
                                 className={`p-2 rounded cursor-pointer text-sm mb-1 ${index === currentChapterIndex
-                                    ? 'bg-green-600/30 text-green-400'
-                                    : 'hover:bg-gray-700 text-gray-300'
+                                        ? 'bg-green-600/30 text-green-400'
+                                        : 'hover:bg-gray-700 text-gray-300'
                                     }`}
                             >
                                 {index + 1}. {chapter.name}
