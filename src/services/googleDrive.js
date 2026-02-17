@@ -2,7 +2,7 @@ import { gapi } from 'gapi-script';
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata';
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 
 let tokenClient;
 let accessToken = null;
@@ -66,8 +66,12 @@ export const signIn = () => {
 
                 const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                     headers: { Authorization: `Bearer ${accessToken}` }
-                }).then(res => {
-                    if (!res.ok) throw new Error('Failed to fetch user info');
+                }).then(async res => {
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        console.error("User info fetch failed:", res.status, res.statusText, errorText);
+                        throw new Error(`Failed to fetch user info: ${res.status} ${errorText}`);
+                    }
                     return res.json();
                 });
 
