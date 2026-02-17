@@ -15,7 +15,7 @@ export const AuthProvider = ({ children }) => {
             })
             .catch((err) => {
                 console.error("Error initializing Google Client", err);
-                setError(err?.error || JSON.stringify(err));
+                setError(err?.error || err?.message || JSON.stringify(err));
                 setLoading(false);
             });
     }, []);
@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }) => {
             setUser(userInfo);
         } catch (err) {
             console.error("Login failed", err);
-            setError(err?.error || "Login failed");
+            setError(err?.error || err?.message || JSON.stringify(err));
         }
     };
 

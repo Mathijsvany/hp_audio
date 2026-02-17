@@ -13,8 +13,8 @@ const Login = () => {
 
                 {error && (
                     <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded-lg mb-6">
-                        <p className="font-bold">Error:</p>
-                        <p className="text-sm">{error.toString()}</p>
+                        <p className="font-bold">Debug Error:</p>
+                        <pre className="text-xs whitespace-pre-wrap breakdown-all">{error.toString()}</pre>
                     </div>
                 )}
 
