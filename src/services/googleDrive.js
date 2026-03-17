@@ -109,29 +109,48 @@ export const listAudiobooks = async () => {
 
     const parentId = hpFolders[0].id;
 
-    const booksResponse = await gapi.client.drive.files.list({
-        q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-        fields: 'nextPageToken, files(id, name)',
-        orderBy: 'name',
-    });
+    let allBooks = [];
+    let pageToken = null;
 
-    return booksResponse.result.files;
+    do {
+        const booksResponse = await gapi.client.drive.files.list({
+            q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'nextPageToken, files(id, name)',
+            orderBy: 'name',
+            pageSize: 1000,
+            pageToken: pageToken
+        });
+
+        allBooks = allBooks.concat(booksResponse.result.files || []);
+        pageToken = booksResponse.result.nextPageToken;
+    } while (pageToken);
+
+    return allBooks;
 };
 
 export const listChapters = async (folderId) => {
     if (!accessToken) throw new Error("Not authenticated");
-    const response = await gapi.client.drive.files.list({
-        q: `'${folderId}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType, thumbnailLink)',
-        orderBy: 'name',
-    });
 
-    console.log("📁 All files in folder:", response.result.files?.map(f => f.name));
+    let allFiles = [];
+    let pageToken = null;
 
-    const files = response.result.files || [];
+    do {
+        const response = await gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and trashed = false`,
+            fields: 'nextPageToken, files(id, name, mimeType, thumbnailLink)',
+            orderBy: 'name',
+            pageSize: 1000,
+            pageToken: pageToken
+        });
+
+        allFiles = allFiles.concat(response.result.files || []);
+        pageToken = response.result.nextPageToken;
+    } while (pageToken);
+
+    console.log("📁 All files in folder:", allFiles.map(f => f.name));
 
     // Filter to only audio files
-    const audioFiles = files.filter(file =>
+    const audioFiles = allFiles.filter(file =>
         file.mimeType && (
             file.mimeType.startsWith('audio/') ||
             file.name.toLowerCase().endsWith('.mp3') ||
@@ -141,7 +160,7 @@ export const listChapters = async (folderId) => {
     );
 
     // Find a cover image (first image file)
-    const coverImage = files.find(file =>
+    const coverImage = allFiles.find(file =>
         file.mimeType && (
             file.mimeType.startsWith('image/') ||
             file.name.toLowerCase().endsWith('.jpg') ||
